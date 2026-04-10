@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>稅務_法規條文查詢</title>
+    <style>
+        /* 直接定義深色模式為預設變數 */
+        :root {
+            --bg-color: #121212;
+            --text-color: #e0e0e0;
+            --container-bg: #1e1e1e;
+            --border-color: #444444;
+            --input-bg: #2d2d2d;
+            --input-text: #e0e0e0;
+            --button-bg: #2980b9;
+            --button-hover: #3498db;
+            --result-bg: #1a2630;
+            --result-border: #2980b9;
+            --answer-color: #ff6b6b;
+            --hint-color: #aaaaaa;
+        }
+
+        body {
+            /* 字型完全對齊題庫系統的設定 */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            font-size: 20px; /* 設定整體預設字型大小為 20px */
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: var(--text-color);
+        }
+
+        .container {
+            background-color: var(--container-bg);
+            padding: 20px 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold; /* 加上標籤粗體，與題庫系統一致 */
+            margin-bottom: 5px;
+        }
+
+        select, input[type="text"], input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            background-color: var(--input-bg);
+            color: var(--input-text);
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 20px; /* 統一字型大小 */
+        }
+
+        .search-btn {
+            background-color: var(--button-bg);
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 20px;
+            width: 100%;
+            transition: background-color 0.3s;
+            font-weight: bold;
+        }
+
+        .search-btn:hover {
+            background-color: var(--button-hover);
+        }
+
+        .result-box {
+            background-color: var(--result-bg);
+            padding: 20px;
+            border-left: 5px solid var(--result-border);
+            border-radius: 4px;
+            margin-top: 20px;
+            white-space: pre-wrap;
+            line-height: 1.8;
+            font-size: 20px;
+            display: block;
+        }
+
+        .status {
+            margin-top: 10px;
+            font-weight: bold; /* 加上粗體，與題庫系統一致 */
+            font-size: 20px;
+        }
+
+        .success { color: #27ae60; }
+        .error { color: var(--answer-color); }
+    </style>
+</head>
+<body>
+
+    <h1>稅務_法規條文查詢</h1>
+
+    <div style="display: none;">
+        <input type="file" id="fileInput" multiple accept=".txt">
+    </div>
+
+    <div class="container">
+        <div class="form-group">
+            <label>1. 法規載入狀態：</label>
+            <div id="fileStatus" class="status">🔄 正在從伺服器自動載入法規...</div>
+        </div>
+
+        <div class="form-group">
+            <label for="lawSelect">2. 選擇法規：</label>
+            <select id="lawSelect">
+                <option value="">載入中...</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="articleInput">3. 輸入條號 (按 Enter 直接查詢)：</label>
+            <input type="text" id="articleInput" placeholder="例如：5 或 1 5">
+        </div>
+
+        <button onclick="searchArticle()" class="search-btn">搜尋</button>
+    </div>
+
+    <div id="result" class="result-box">請輸入條號進行檢索。</div>
+
+    <script>
+        let lawDatabase = {};
+
+        // 定義要自動載入的稅務法規檔案清單
+        const lawFiles = [
+            '稅捐稽徵法.txt',
+            '稅捐稽徵法施行細則.txt',
+            '所得稅法.txt',
+            '所得稅法施行細則.txt',
+            '所得基本稅額條例.txt',
+            '所得基本稅額條例施行細則.txt',
+            '營利事業所得稅查核準則.txt',
+            '加值型及非加值型營業稅法.txt',
+            '加值型及非加值型營業稅法施行細則.txt',
+            '統一發票使用方法.txt',
+            '遺產及贈與稅法.txt',
+            '遺產及贈與稅法施行細則.txt',
+            '記帳士法.txt',
+            '記帳士職業倫理道德規範.txt'
+        ];
+
+        // 網頁載入完成時執行自動抓取
+        window.addEventListener('DOMContentLoaded', async function() {
+            const select = document.getElementById('lawSelect');
+            let loadedCount = 0;
+
+            for (const filename of lawFiles) {
+                try {
+                    // 使用 fetch API 取得同目錄下的 txt 檔案
+                    const response = await fetch(filename);
+                    if (!response.ok) throw new Error(`HTTP 錯誤狀態: ${response.status}`);
+                    
+                    const text = await response.text();
+                    const lawName = filename.replace(/\.[^/.]+$/, ""); // 去除副檔名
+                    
+                    // 寫入資料庫
+                    lawDatabase[lawName] = text;
+
+                    // 第一次成功載入時清空「載入中...」的選項
+                    if (loadedCount === 0) {
+                        select.innerHTML = '';
+                    }
+
+                    // 動態新增選項至下拉式選單
+                    const option = document.createElement('option');
+                    option.value = lawName;
+                    option.textContent = lawName;
+                    select.appendChild(option);
+
+                    loadedCount++;
+                } catch (error) {
+                    console.error("無法載入檔案：" + filename, error);
+                }
+            }
+
+            // 更新狀態文字
+            const statusDiv = document.getElementById('fileStatus');
+            if (loadedCount > 0) {
+                statusDiv.textContent = `✅ 成功自動載入 ${loadedCount} 部法規！`;
+                statusDiv.className = 'status success';
+            } else {
+                select.innerHTML = '<option value="">載入失敗</option>';
+                statusDiv.textContent = '❌ 法規載入失敗，請確認檔案已上傳至正確目錄。';
+                statusDiv.className = 'status error';
+            }
+        });
+
+        function parseArticleNumber(str) {
+            const parts = str.split('-');
+            return parseFloat(parts[0]) + (parts.length > 1 ? parseFloat(parts[1]) / 1000 : 0);
+        }
+
+        function escapeRegExp(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        function searchArticle() {
+            const lawKey = document.getElementById('lawSelect').value;
+            const articleInput = document.getElementById('articleInput').value.trim();
+            const resultDiv = document.getElementById('result');
+
+            if (!lawKey) {
+                resultDiv.innerHTML = '<span class="error">查無確切資訊（請先等待法規載入或重新整理網頁）</span>';
+                return;
+            }
+            if (!articleInput) {
+                resultDiv.innerHTML = '<span class="error">查無確切資訊（請輸入條號）</span>';
+                return;
+            }
+
+            const rawText = lawDatabase[lawKey];
+            
+            const inputParts = articleInput.split(/\s+/).filter(Boolean);
+            let startStr = inputParts[0];
+            let endStr = inputParts.length > 1 ? inputParts[1] : inputParts[0];
+
+            if (parseArticleNumber(startStr) > parseArticleNumber(endStr)) {
+                [startStr, endStr] = [endStr, startStr];
+            }
+
+            const escapedStart = escapeRegExp(startStr);
+            const startRegex = new RegExp('(?:^|\\r?\\n)\\s*第\\s*' + escapedStart + '\\s*條', 'i');
+            const startMatch = rawText.match(startRegex);
+
+            if (!startMatch) {
+                resultDiv.innerHTML = `<span class="error">查無確切資訊（找不到起始條文：第 ${startStr} 條）</span>`;
+                return;
+            }
+            const startIndex = startMatch.index;
+
+            const escapedEnd = escapeRegExp(endStr);
+            const endRegexString = `(?:^|\\r?\\n)\\s*(第\\s*${escapedEnd}\\s*條[\\s\\S]*?)(?=\\r?\\n\\s*第\\s*\\d+(?:-\\d+)?\\s*條|\\r?\\n\\s*第\\s*[一二三四五六七八九十百\\d]+\\s*(?:編|章|節|款|目)|$)`;
+            const endRegex = new RegExp(endRegexString, 'i');
+            const endMatch = rawText.match(endRegex);
+
+            if (!endMatch) {
+                resultDiv.innerHTML = `<span class="error">查無確切資訊（找不到結束條文：第 ${endStr} 條）</span>`;
+                return;
+            }
+            
+            const endIndex = endMatch.index + endMatch[0].length;
+
+            let cleanText = rawText.substring(startIndex, endIndex).trim();
+
+            if (startStr === endStr) {
+                const pureTitleRegex = new RegExp(`^第\\s*${escapedStart}\\s*條$`);
+                if (pureTitleRegex.test(cleanText.replace(/\s+/g, ''))) {
+                    resultDiv.innerHTML = '<span class="error">查無確切資訊（該條文可能已被刪除或無內容）</span>';
+                    return;
+                }
+            }
+
+            resultDiv.textContent = cleanText;
+        }
+        
+        document.getElementById('articleInput').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                searchArticle();
+            }
+        });
+    </script>
+</body>
+</html>
